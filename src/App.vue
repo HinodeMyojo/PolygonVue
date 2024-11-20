@@ -1,23 +1,26 @@
 <template>
-  <div class="file-list">
-    <div class="test">
-      <div class="text">
-        <h3>
-          Для запуска примера в настройках Адаптера Рутокен Плагин надо поставить флажок "Разрешить
-          открывать локальные файлы по ссылкам".
-        </h3>
-        <h3>
-          Для работы этой странички требуется ключевая пара и сертификат.
-          <a href="http://ra.rutoken.ru" target="_blank">Создайте их на ra.rutoken.ru</a>
-        </h3>
-      </div>
-      <div id="pluginStatus">
-        <pre>Загрузка Плагина...</pre>
-      </div>
-      <div class="elements">
-        <div v-for="file in files" :key="file.fileName" class="file-item">
-          <span class="file-name">{{ file.fileName }}</span>
-          <button @click="signX(file)">Подписать</button>
+  <div class="main">
+    <div class="cont">
+      <div class="inner-block">
+        <div class="sertificat">
+          <label for="sertifications">Список сертификатов</label>
+          <select v-model="selectedSert" id="sertifications">
+            <option v-for="item in sertificats" :key="item.id" :value="item.value">
+              {{ item.label }}
+            </option>
+          </select>
+        </div>
+        <div class="sigh">
+          <label for="file">Выбрать файл</label>
+          <input @change="onChangeFile" type="file" />
+          <hr />
+          <label for="sigh">Подписать хэш</label>
+          <textarea readonly :value="base64" name="" id="sigh"></textarea>
+          <button @click="sighHash" class="sigh-button">Подписать</button>
+        </div>
+        <div class="result-sigh">
+          <label for="result">Подпись в формате base64</label>
+          <textarea v-model="signature" readonly name="" id="result"></textarea>
         </div>
       </div>
     </div>
@@ -26,163 +29,96 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { sign } from './rutoken'
+import { useBase64 } from '@vueuse/core'
+import cadesplugin from 'crypto-pro-cadesplugin'
 
-var files = ref([])
-var hash = ref('')
-onMounted(() => getFiles())
-
-const getFiles = async () => {
-  const response = await fetch('https://localhost:4445/files/', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'Accept-Language': 'en-US,en;q=0.5',
-      'Accept-Encoding': 'gzip, deflate, br',
-      Connection: 'keep-alive',
-      Host: 'localhost:4445',
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.3'
-    }
-  })
-  const data = await response.json()
-  files.value = data
-
-  console.log(response)
+// Блок импорта файла и его конвертация в base64
+const file = ref()
+const onChangeFile = (e) => {
+  file.value = e.target.files[0]
 }
+const { base64 } = useBase64(file)
 
-const signFile = async (file) => {
-  const response = await fetch(`https://localhost:4445/files/sigh/${file.fileName}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'Accept-Language': 'en-US,en;q=0.5',
-      'Accept-Encoding': 'gzip, deflate, br',
-      Connection: 'keep-alive',
-      Host: 'localhost:4445',
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.3'
-    }
+// Блок вывода сертификатов
+const sertificats = ref([])
+const selectedSert = ref(null)
+
+onMounted(async () => {
+  getSertList().then((res) => {
+    sertificats.value = res
   })
-  const data = await response.json()
-  hash.value = data
-  console.log(hash.value)
-}
+})
 
-const signX = async (file) => {
-  await signFile(file)
-  sign(hash.value)
+async function getSertList() {
+  const certsApi = await cadesplugin()
+  const certsList = await certsApi.getCertsList()
+  const list = certsList.map(({ subjectInfo, thumbprint }) => ({
+    value: thumbprint,
+    label: subjectInfo
+  }))
+  console.log(list)
+  return list
+}
+// Блок подписи хэша
+const signature = ref('')
+
+const sighHash = async () => {
+  console.log(base64)
+  const certsApi = await cadesplugin()
+  const sign = await certsApi.signBase64(selectedSert.value, base64)
+  signature.value = sign
+  console.log(signature.value)
 }
 </script>
 
 <style scoped>
-/* Общие стили */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: Arial, sans-serif;
-  background-color: #f9f9f9;
-  color: #333;
-}
-.elements {
+.main {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-/* Стили для текста */
-.test {
-  max-width: 100%;
-  padding: 20px;
-  background-color: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-.text h3 {
-  margin-bottom: 15px;
-  font-size: 16px;
-  color: #555;
-}
-
-.text a {
-  color: #007bff;
-  text-decoration: none;
-}
-
-.text a:hover {
-  text-decoration: underline;
-}
-
-/* Стили для списка файлов */
-.file-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  align-items: center;
-  justify-content: center;
-  margin: 20px auto;
   width: 100%;
   height: 100vh;
-  max-width: 1200px;
-}
-
-.file-item {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;
+}
+.cont {
+  width: 800px;
+  height: 500px;
+  border: 1px solid black;
+  align-content: center;
+}
+.sertificat {
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  max-width: 500px;
-  padding: 15px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  background-color: #ffffff;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
-
-.file-item:hover {
-  background-color: #e6f7ff;
-  box-shadow: 0 5px 15px rgba(0, 123, 255, 0.1);
+.inner-block {
+  display: flex;
+  width: 90%;
+  height: 90%;
+  flex-direction: column;
+  align-items: center;
+  justify-self: center;
+  gap: 20px;
 }
-
-.file-name {
-  font-weight: bold;
-  font-size: 16px;
-  color: #333;
+.sigh {
+  display: flex;
+  gap: 5px;
+  flex-direction: column;
+  width: 100%;
 }
-
-button {
-  padding: 8px 16px;
-  font-size: 14px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s ease, transform 0.3s ease;
+.result-sigh {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
-
-button:hover {
-  background-color: #0056b3;
-  transform: translateY(-2px);
+hr {
+  display: block;
+  height: 1px;
+  border: 0;
+  border-top: 1px solid #000000;
+  margin: 1em 0;
+  padding: 0;
 }
-
-button:active {
-  background-color: #004085;
-  transform: translateY(0);
-}
-
-/* Статус загрузки плагина */
-#pluginStatus {
-  font-size: 14px;
-  font-style: italic;
-  color: #666;
-  margin-top: 20px;
+.sigh-button {
+  width: 20%;
 }
 </style>
